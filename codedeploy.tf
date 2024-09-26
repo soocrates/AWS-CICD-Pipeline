@@ -1,114 +1,73 @@
-# IAM Role for CodePipeline
-resource "aws_iam_role" "codepipeline_role" {
-  name = "codepipeline-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "codepipeline.amazonaws.com"
-        },
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
+resource "aws_codedeploy_app" "app" {
+  name             = "example-deploy-app"
+  compute_platform = "Server"
 }
 
-# Attach necessary policies to CodePipeline role
-resource "aws_iam_role_policy_attachment" "codepipeline_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess"
+resource "aws_codedeploy_deployment_group" "deploy_group" {
+  app_name              = aws_codedeploy_app.app.name
+  deployment_group_name = "example-deploy-group"
+  service_role_arn      = aws_iam_role.codedeploy_role.arn
+
+  deployment_config_name = aws_codedeploy_deployment_config.custom_config.deployment_config_name
+  autoscaling_groups     = ["Riddhasoft-web-asg"]
+
+  deployment_style {
+    deployment_type   = "IN_PLACE"
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+  }
+
+  load_balancer_info {
+    elb_info {
+      name = "Riddhasoft-ALB-web"
+    }
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "codepipeline_codebuild_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess"
+resource "aws_codedeploy_deployment_config" "custom_config" {
+  deployment_config_name = "CustomOneAtATime"
+
+  minimum_healthy_hosts {
+    type  = "HOST_COUNT"
+    value = 1
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "codepipeline_codedeploy_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployFullAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "codepipeline_s3_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "codepipeline_logs_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
-}
-
-# IAM Role for CodeBuild
-resource "aws_iam_role" "codebuild_role" {
-  name = "codebuild-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "codebuild.amazonaws.com"
-        },
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "codebuild_policy" {
-  role       = aws_iam_role.codebuild_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess"
-}
-
-# IAM Role for CodeDeploy
 resource "aws_iam_role" "codedeploy_role" {
-  name = "codedeploy-role"
+  name = "codedeploy-service-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Service = "codedeploy.amazonaws.com"
-        },
-        Action = "sts:AssumeRole"
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Effect = "Allow",
+      Principal = {
+        Service = "codedeploy.amazonaws.com"
       }
-    ]
+    }]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "codedeploy_policy" {
-  role       = aws_iam_role.codedeploy_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodeDeployFullAccess"
-}
-resource "aws_iam_role_policy_attachment" "codepipeline_codestar_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AWSCodeStarFullAccess"
-}
-resource "aws_iam_policy" "codepipeline_codestar_policy" {
-  name = "CodePipelineCodeStarPermissions"
+resource "aws_iam_role_policy" "codedeploy_policy" {
+  role = aws_iam_role.codedeploy_role.id
 
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Effect = "Allow",
-        Action = [
-          "codestar-connections:UseConnection"
-        ],
-        Resource = "arn:aws:codestar-connections:us-east-1:246156126468:connection/034edc49-fb32-4fba-9b91-33b62ef6599b"
+        Action   = "codedeploy:*",
+        Effect   = "Allow",
+        Resource = "*"
+      },
+      {
+        Action   = "autoscaling:*",
+        Effect   = "Allow",
+        Resource = "*"
       }
     ]
   })
-}
-
-resource "aws_iam_role_policy_attachment" "codepipeline_custom_codestar_policy" {
-  role       = aws_iam_role.codepipeline_role.name
-  policy_arn = aws_iam_policy.codepipeline_codestar_policy.arn
 }
